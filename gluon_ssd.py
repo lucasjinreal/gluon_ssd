@@ -16,6 +16,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import random
 import sys
+import cv2
 
 class_names = ['pikachu']
 num_class = len(class_names)
@@ -259,9 +260,10 @@ def detect_image(img_file):
     img = nd.array(img)
     print('input image shape: ', img.shape)
 
-    net = ToySSD(2)
+    net = ToySSD(num_class)
     ctx = mx.cpu()
-    # net.initialize(mx.init.Xavier(magnitude=2), ctx=ctx)
+    net.initialize(mx.init.Xavier(magnitude=2), ctx=ctx)
+    net.collect_params().reset_ctx(ctx)
     params = 'ssd_pretrained.params'
     net.load_params(params, ctx=ctx)
 
@@ -274,14 +276,14 @@ def detect_image(img_file):
     cls_probs = nd.SoftmaxActivation(nd.transpose(cls_preds, (0, 2, 1)), mode='channel')
     # apply shifts to anchors boxes, non-maximum-suppression, etc...
     output = MultiBoxDetection(*[cls_probs, box_preds, anchors], force_suppress=True, clip=False)
+    output = output.asnumpy()
     print(output)
-
-    mpl.rcParams['figure.figsize'] = (10, 10)
+    print(output.shape)
     pens = dict()
-    plt.clf()
-    plt.imshow(img)
 
-    thresh = 0.45
+    plt.imshow(origin_img)
+
+    thresh = 0.69
     for det in output[0]:
         cid = int(det[0])
         if cid < 0:
@@ -299,7 +301,24 @@ def detect_image(img_file):
         plt.gca().text(xmin, ymin - 2, '{:s} {:.3f}'.format(text, score),
                        bbox=dict(facecolor=pens[cid], alpha=0.5),
                        fontsize=12, color='white')
+    plt.axis('off')
+    plt.savefig('result.png', dpi=100)
     plt.show()
+
+
+def detect2(img_file):
+    image = cv2.resize(img_file, (data_shape, data_shape))
+    # swap BGR to RGB
+    image = image[:, :, (2, 1, 0)]
+    # convert to float before subtracting mean
+    image = image.astype(np.float32)
+    # subtract mean
+    image -= np.array([123, 117, 104])
+    # organize as [batch-channel-height-width]
+    image = np.transpose(image, (2, 0, 1))
+    image = image[np.newaxis, :]
+    # convert to ndarray
+    image = nd.array(image)
 
 
 if __name__ == '__main__':
@@ -312,7 +331,7 @@ if __name__ == '__main__':
             print(e)
             print('for detect please provide image file path.')
     else:
-        print(' `python3 gluon_ssd.py` train for train,'
+        print(' `python3 gluon_ssd.py train `for train,'
               '`python3 gluon_ssd.py detect /your/image/path.jpg` for detect.')
 
 
